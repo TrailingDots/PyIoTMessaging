@@ -1,0 +1,2 @@
+2017-12-03 14:05:36.157951 metali2 arg1 arg2 arg3
+2017-12-03 14:05:36.158104 metali2 A test message to prove send_msg() gets called.
