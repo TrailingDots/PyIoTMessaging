@@ -130,8 +130,9 @@ def mainline():
     # Send the exit message to the server
     # No frills such as timestamp, host, etc. added!
     if SVR_EXIT:
-        socket.send('%EXIT%')
+        socket.send('#EXIT#')
 
+    print('Client exiting')
     sys.exit(0)
 
 if __name__ == '__main__':

@@ -14,8 +14,14 @@ def usage(exit_code):
                             Default: ./log.txt
             --port=port#  - The port number for messaging.
                             Default: 5555
+            --echo=true/false - true to echo to stdout, false=keep silent
+                            Default: false meaning no echo
 
-        Terminate this program with Ctrl-C.
+        Terminate this program with Ctrl-C
+        or:
+            Send a log message with #EXIT# in it.
+            Sending the log msg #EXIT# will cause a PUB msg
+            with #EXIT# as the message contents.
     """)
     sys.exit(exit_code)
 
@@ -29,6 +35,9 @@ LOG_FILENAME = './log.txt'
 
 # Use the default port
 PORT = 5555
+
+# True to echo msg to stdout
+ECHO = False
 
 def process_cmd_line():
     """
@@ -73,7 +82,7 @@ def mainline():
 
     # Open the log file for writing
     try:
-        # Open log file. If problems, report and error out.
+        # Open log file with append. If problems, report and error out.
         log_file_handle = open(LOG_FILENAME, 'wa')
     except Exception as err:
         sys.stdout.write(str(err) + '\n')
@@ -90,14 +99,16 @@ def mainline():
     print('log_server:log filename=%s, port=%d' % (LOG_FILENAME, PORT))
 
     while True:
+        #msg = socket.recv() # discard the envelop
         msg = socket.recv()
-        if msg == '%EXIT%':
-            print('Exiting')
+        if '#EXIT#' in msg:
+            print('server Exiting')
             break
         msg_timestamp = '%s %s\n' % (str(datetime.now()), msg)
         log_file_handle.write(msg_timestamp)
         log_file_handle.flush() # Insist on writing immediately
     sys.exit(0)
+
 
 if __name__ == '__main__':
     mainline()
