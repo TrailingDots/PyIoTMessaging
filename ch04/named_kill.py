@@ -134,7 +134,7 @@ def kill_or_list(params, proc_list):
 
 if __name__ == '__main__':
     params = process_cmd_line()
-    proc_list = find_procs_by_name(name)
+    proc_list = find_procs_by_name(params['name'])
     kill_or_list(params, proc_list)
     sys.exit(0)
 

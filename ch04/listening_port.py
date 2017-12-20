@@ -115,7 +115,7 @@ def listening(port,
         sys.stderr.write(err + '\n')
     for line in out.splitlines():
         items = line.split()
-        if items[0] != pid:     # Ignore all but requested pid
+        if (len(items) > 0) and (items[0] != pid):     # Ignore all but requested pid
             continue
 
         # Kill the process if requested.

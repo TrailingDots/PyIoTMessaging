@@ -195,11 +195,12 @@ class ServerClientTest(unittest.TestCase):
 
         self.assertEqual(2*count, get_line_count(log_name))
 
+    '''
     def test_timing_100k(self):
         """Time sending 10000 simple logs."""
         log_count = 100000    # Number of l0gs to send.
         log_name = '100k.log'
-        sleeper = 4           # Time to sleep and let the server write the data.
+        sleeper = 15          # Time to sleep and let the server write the data.
         print function_name()
 
 
@@ -219,12 +220,12 @@ class ServerClientTest(unittest.TestCase):
         print('Time to send %d logs:%s' % (log_count, delta))
 
         self.assertEqual(log_count, get_line_count(log_name) )
-
+    '''
 
     def test_timing_10k_20clients(self):
         """Time sending 1000 logs from each of 20 clients."""
 
-        log_count = 10000    # Number of l0gs to send.
+        log_count = 1000     # Number of l0gs to send.
         log_name = '20client.log'
         number_clients = 10  # Number of clients banging on the server
         sleeper = 4          # Time is sec to let server write lots.
