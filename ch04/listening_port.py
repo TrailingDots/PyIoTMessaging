@@ -54,6 +54,7 @@ import sys
 import subprocess
 import platform
 import psutil
+from find_executable import find_executable
 
 # Default ZeroMQ port
 PORT = 5570
@@ -84,8 +85,11 @@ def listening(port,
         sys.stderr.write('listeningPort available only under Linux!\n')
         sys.exit(-1)
 
-    proc = subprocess.Popen('/usr/sbin/fuser %s/tcp' %
-                            str(port),
+    fuser = find_executable('fuser')
+    if fuser == None:
+        print('Cannot find "fuser". Exiting.')
+        sys.exit(1)
+    proc = subprocess.Popen('%s %s/tcp' % (fuser, str(port)),
                             shell=True,
                             stdout=subprocess.PIPE,
                             stderr=subprocess.STDOUT)
