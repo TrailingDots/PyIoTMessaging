@@ -90,6 +90,7 @@ def listening(port,
                             stdout=subprocess.PIPE,
                             stderr=subprocess.STDOUT)
     line = proc.stdout.readline()
+    print('fuserline:%s' % line)
     subproc_items = line.split()
     if len(subproc_items) == 0:
         if shortened is False:
@@ -115,6 +116,7 @@ def listening(port,
 
         # Kill the process if requested.
         if kill:
+            print('killing pid %d' % pid)
             p = psutil.Process(int(pid))
             p.terminate()    # Kill the process.
             return 1

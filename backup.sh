@@ -23,6 +23,7 @@
 
 # Get rid of any stray log files. Ignore any error messages.
 /usr/bin/rm $(find . -name '*.log') 2> /dev/null
+/usr/bin/rm $(find . -name 'typescript') 2> /dev/null
 
 # Get rid of generated python files
 /usr/bin/rm $(find . -name '*.pyc' ) 2> /dev/null

@@ -2,6 +2,14 @@
 #
 # Test suite for log_server.py and log_client.py
 #
+# If any tests hang, run this in a terminal to find
+# the hanging processes:
+#    ps aux | egrep log_client\|log_server
+#
+# After running these tests, the above command line
+# should run and indicate *no* hanging processes
+# as a result of these integration tests.
+#
 
 import datetime         # for timing
 import functools
@@ -9,27 +17,30 @@ import os
 import sys
 import subprocess       # To spawn subprocesses
 import time
-from unittest import TestCase, main
+import unittest
 
 from listening_port import listening, is_listening
 import log_client 
 import log_server
+from named_kill import find_procs_by_name
 
+# Names of client and server python scripts.
 LOG_SERVER_NAME = './log_server.py'
 LOG_CLIENT_NAME = './log_client.py'
 
+# NOISY == True prints trace messages that might
+# assist in debugging.
+NOISY = True
 
-def tracer(fn):
-    """
-    Decorator to track testing methods through the logger.
-    """
-    from itertools import chain
-    def wrapped(*v, **k):
-        name = fn.__name__
-        print '\n\n----> %s(%s)' % (
-            name, ','.join(map(repr, chain(v, k.values()))))
-        return fn(*v, **k)
-    return wrapped
+
+def function_name():
+    # function (getting the name of the previous frame)
+    # For the curr func: print sys._getframe().f_code.co_name
+    return sys._getframe().f_back.f_code.co_name
+
+
+def print_function_name():
+    print('\n\n========== %s ==========' % function_name())
 
 
 def accum_sleep_time(sleep_time):
@@ -50,7 +61,9 @@ def stop_timer(start, sleeper):
 
 
 def create_process(cmd_line):
-    print('create_process:%r' % cmd_line)
+    """Create a subprocess and start it running."""
+    if NOISY:
+        print('create_process:%r' % cmd_line)
     proc = subprocess.Popen(cmd_line, shell=True)
     return proc
 
@@ -63,15 +76,21 @@ def load_file(filename):
         content = content_file.read()
     return content
 
+
 def count_lines_in_file(filename):
     wc_out, wc_err = subprocess.Popen('/usr/bin/wc -l %s' % filename,
             shell=True,
             stdout=subprocess.PIPE,
             stderr=subprocess.STDOUT).communicate()
-    
-    print('wc_out:%s' % wc_out)
-    wc_count = int(wc_out.split(' ')[0])
+
+    if NOISY:
+        print('wc_out:%s' % wc_out)
+    try:
+        wc_count = int(wc_out.split(' ')[0])
+    except ValueError:
+        print('unexpected value in return from wc:%s:' % (err, wc_out))
     return wc_count
+
 
 def kill_listening_processes(port):
     """
@@ -92,143 +111,132 @@ def kill_listening_processes(port):
     return 0    # No listeners
 
 
-def report_client_server_stdout(client_proc, server_proc):
-    client_out, client_err = client_proc.communicate()
-    print('after comm: client_out:%s\nclient_err:%s' % \
-            (client_out, client_err))
-
-    svr_status = server_proc.poll()
-    print('svr_status=%r' % svr_status)
-
-    # Look at the server output
-    clt_status = client_proc.poll()
-    print('clt_status=%r' % clt_status)
-
-    server_out, server_err = server_proc.communicate()
-    print('after comm: stdout:%s\nstderr:%s' % \
-            (server_out, server_err))
-
-
 def get_line_count(log_name):
-    # Anwer the actual_line_count
+    """Given a log file name, 
+    answer the number of lines in that log file.
+    """
 
-    # Count the lines of output
     data = load_file(log_name)
-    #print('data:%s' % data)    # Echo data to stdout
 
-    #============================================================
-    # Log file must have 'count' lines.
-    # This could be better - could use regex to determine
-    # if the logged data meets expectations.
-    #============================================================
+    """
+     Log file must have 'count' lines.
+     This could be better - could use regex to determine
+     if the logged data meets expectations.
+    """
     return  count_lines_in_file(log_name)
 
+class ServerClientTest(unittest.TestCase):
 
-class ServerClientTest(TestCase):
-
-    log_name = 'abc.txt'
-    count = 10
-    noisy = True
+    # Port value used by all tests.
     port = 5555
 
     def setUp(self):
-        # Kill any listening processes.
         kill_listening_processes(ServerClientTest.port)
-        # Remove log file if it exists.
-        if os.path.isfile(ServerClientTest.log_name):
-            os.remove(ServerClientTest.log_name)
 
-    @tracer
     def test_happy_path(self):
-        count = 10000   # 10K logs from client to server
+        """Test the happy path where parameters
+        provide a simple and happy logging environment.
+
+        python -m unittest server_client_test.ServerClientTest.test_happy_path
+        """
+
+        print function_name()
+
+        log_name = 'happy.log'
+        count = 10  # logs from client to server
+
         # Create a server
-        server_proc = create_process('%s --log=%s --port=%d' % 
-            (LOG_SERVER_NAME, ServerClientTest.log_name, ServerClientTest.port))
+        server_proc = create_process('%s --log=%s --log_append=False --port=%d' %
+            (LOG_SERVER_NAME, log_name, ServerClientTest.port))
 
         # Create a client and send logs
-        client_proc= create_process('%s --svr-exit=true --count=%d --port=%d' %
+        client_proc = create_process('%s --svr-exit=true --count=%d --port=%d' %
             (LOG_CLIENT_NAME, count, ServerClientTest.port))
-
-        # Look at the client and server output
-        if ServerClientTest.noisy:
-            report_client_server_stdout(client_proc, server_proc)
-
-        self.assertEqual(count, get_line_count(ServerClientTest.log_name))
+        time.sleep(1)
+        self.assertEqual(count, get_line_count(log_name))
 
 
-    @tracer
     def test_two_clients(self):
-        count = 10000   # 10k logs
-        sleeper = 1
-        # Create a server
-        server_proc = create_process('%s --log=%s --port=%d' % 
-            (LOG_SERVER_NAME, ServerClientTest.log_name, ServerClientTest.port))
+        """A happy path where 2 clients log with parameters
+        that should cause no problems.
+        """
 
-        # Create a client and send 10 logs
+        print function_name()
+
+        log_name = '2clients.log'
+        count = 10000   # 10k logs
+        sleeper = 4     # Sleep time to allow server to process.
+
+        # Create a client and send count logs
         client_proc1 = create_process('%s --count=%d --port=%d --log_msg=Client1' %
             (LOG_CLIENT_NAME, count, ServerClientTest.port))
 
-        # Create another client and send 20 logs
+        # Create another client and send count logs
         client_proc2 = create_process('%s --count=%d --port=%d --log_msg=Client2' %
             (LOG_CLIENT_NAME, count, ServerClientTest.port))
+
+        # Create a server
+        server_proc = create_process('%s --log_append=False --log=%s --port=%d' % 
+            (LOG_SERVER_NAME, log_name, ServerClientTest.port))
 
         # Wait for the 2 clients to terminate
         client_proc1.communicate()
         client_proc2.communicate()
 
+        # Need to sleep because the server has not had time
+        # to process all the logs.
         accum_sleep_time(sleeper)
 
         # Create another client simply to exit
-        client_exit = create_process('%s --svr-exit=true --count=1 --port=%d --log_msg=#EXIT#' %
+        # If the sleep time is too short, the buffered logs
+        # in the server get dropped. This yields a false negative.
+        client_exit = create_process('%s --svr-exit=true --count=1 --port=%d --log_msg=#EXIT# test_two_clients' %
             (LOG_CLIENT_NAME, ServerClientTest.port))
 
-        # Look at the client and server output
-        if ServerClientTest.noisy:
-            report_client_server_stdout(client_proc1, server_proc)
-            report_client_server_stdout(client_proc2, server_proc)
+        self.assertEqual(2*count, get_line_count(log_name))
 
-        self.assertEqual(2*count, get_line_count(ServerClientTest.log_name))
-
-    @tracer
     def test_timing_100k(self):
         """Time sending 10000 simple logs."""
         log_count = 100000    # Number of l0gs to send.
         log_name = '100k.log'
-        # Create a server
-        server_proc = create_process('%s --log=%s --port=%d' % 
-            (LOG_SERVER_NAME, log_name, ServerClientTest.port))
+        sleeper = 4           # Time to sleep and let the server write the data.
+        print function_name()
 
-        # Create a client and send 10 logs
+
+        start = datetime.datetime.now()
+
+        # Create a client and send logs
         client_proc1 = create_process('%s --svr_exit=true --count=%d --port=%d --log_msg="100k logs"' %
             (LOG_CLIENT_NAME, log_count, ServerClientTest.port))
 
-        # Create another client simply to exit
-        start = datetime.datetime.now()
+        # Create a server
+        server_proc = create_process('%s --log_append=False --log=%s --port=%d' %
+            (LOG_SERVER_NAME, log_name, ServerClientTest.port))
 
-        # Look at the client and server output
-        if ServerClientTest.noisy:
-            report_client_server_stdout(client_proc1, server_proc)
+        accum_sleep_time(sleeper)
 
-        stop = datetime.datetime.now()
-        delta = stop - start    # Duration to send the logs
+        delta = stop_timer(start, sleeper)
         print('Time to send %d logs:%s' % (log_count, delta))
 
-        self.assertEqual( log_count, get_line_count(log_name) )
+        self.assertEqual(log_count, get_line_count(log_name) )
 
 
-    @tracer
     def test_timing_10k_20clients(self):
-        """Time sending 1000 logs in each of 20 clients."""
+        """Time sending 1000 logs from each of 20 clients."""
 
         log_count = 10000    # Number of l0gs to send.
         log_name = '20client.log'
-        number_clients = 1  # Number of clients banging on the server
+        number_clients = 10  # Number of clients banging on the server
+        sleeper = 4          # Time is sec to let server write lots.
+
+        print function_name()
 
         # Create another client simply to exit
         start = datetime.datetime.now()
 
-        print(' Create a server, port%d' % ServerClientTest.port)
-        server_proc = create_process('%s --log=%s --port=%d' % 
+        if NOISY:
+            print(' Create a server, port%d' % ServerClientTest.port)
+        server_proc = create_process('%s --log_append=False --log=%s --port=%d' %
             (LOG_SERVER_NAME, log_name, ServerClientTest.port))
 
         client_list = []
@@ -238,35 +246,83 @@ class ServerClientTest(TestCase):
                 '%s --count=%d --port=%d --log_msg="client %d"' %
                 (LOG_CLIENT_NAME, log_count, ServerClientTest.port, ndx)))
 
-        #import pdb; pdb.set_trace()
-
-
-        print(' Wait for all %d clients to exit' % len(client_list))
+        if NOISY:
+            print(' Wait for all %d clients to exit' % len(client_list))
         for client in client_list:
-            print('getting status code for pid %r' % client.pid)
-            out, err = client.communicate() # Wait for client to exit
-            print(' Wait for client to terminate ')
+            out, err = client.communicate()     # Wait for client to exit
             client_ret_code = client.wait()
-            print ('status return code: %d, client: %r' % (client_ret_code, client.pid))
+            if NOISY:
+                print('status return code: %d, client: %r' % (client_ret_code, client.pid))
             if not (client_ret_code == 0):
-                print ('Non-zero return: %d, client: %r', (client_ret_code, client.pid))
+                print('Non-zero return: %d, client: %r', (client_ret_code, client.pid))
 
-        print(' All clients finished. Sleep 4 sec to allow server to catch up.')
-        sleeper = 4
+        if NOISY:
+            print(' All clients finished. Sleep 4 sec to allow server to catch up.')
         accum_sleep_time(sleeper)
 
-        print(' Sending #EXIT# to the server')
+        if NOISY:
+            print(' Sending #EXIT# to the server')
         client_list.append(create_process(
-            '%s --count=1 --svr-exit=true --port=%d --log_msg=#EXIT#' %
+            '%s --count=1 --svr-exit=true --port=%d --log_msg=#EXIT# test_timing_10k_20clients' %
             (LOG_CLIENT_NAME, ServerClientTest.port)))
 
-        #stop = datetime.datetime.now()
-        #delta = stop - start    # Duration to send the logs
         delta = stop_timer(start, sleeper)
         print('Time to send %d logs:%s' % (number_clients*log_count, delta))
 
         self.assertEqual(number_clients*log_count, get_line_count(log_name))
 
+class CommandLineTest(unittest.TestCase):
+    """This class test the command line handling."""
+
+    # Port value used by all tests.
+    port = 5555
+
+    def setUp(self):
+        kill_listening_processes(ServerClientTest.port)
+
+    def InvalidPortTest(self):
+        """Pass various values of invalid ports"""
+
+        print function_name()
+
+        # Non-numeric port number
+        bad_port = create_process('%s --svr-exit=true --port=%d' %
+            (LOG_CLIENT_NAME, 1, 'abc'))
+        print('bad_port:%s' % bad_port)
+
+
+def list_hanging_processes():
+    """List any hanging processes related to these tests.
+    This test provides only a rough guess as it does not
+    account for our port assignment. Other ports may
+    get included if they seek active processing.
+
+    The caller must decide if these reported processes
+    must be killed.
+
+    Returns count of hanging processes.
+    """
+
+    print('\n-----------------\nlist_hanging_processes:')
+    hanging = 0
+    for proc in ['log_client', 'log_server']:
+        pid_list = find_procs_by_name('log_client')
+        for pid, cmdline in pid_list:
+            hanging += 1
+            print('%s\t%s' % (pid, cmdline))
+    return hanging
+
+def suite():
+    test_suite = unittest.makeSuite(ServerClientTest)
+    return unittest.TestCaseSuite((
+            testSuite,
+        ))
 
 if __name__ == '__main__':
-    main()
+    unittest.main(exit=False)
+
+    # Ensure that no hanging processes exist.
+    hanging = list_hanging_processes()
+    print('Number of hanging processes: %d' % hanging)
+    sys.exit(0)
+
