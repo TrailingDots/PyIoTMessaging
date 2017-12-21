@@ -190,7 +190,7 @@ class ServerClientTest(unittest.TestCase):
         # Create another client simply to exit
         # If the sleep time is too short, the buffered logs
         # in the server get dropped. This yields a false negative.
-        client_exit = create_process('%s --svr-exit=true --count=1 --port=%d --log_msg=#EXIT# test_two_clients' %
+        client_exit = create_process('%s --svr-exit=true --count=1 --port=%d --log_msg=@EXIT@ test_two_clients' %
             (LOG_CLIENT_NAME, ServerClientTest.port))
 
         self.assertEqual(2*count, get_line_count(log_name))
@@ -262,9 +262,9 @@ class ServerClientTest(unittest.TestCase):
         accum_sleep_time(sleeper)
 
         if NOISY:
-            print(' Sending #EXIT# to the server')
+            print(' Sending @EXIT@ to the server')
         client_list.append(create_process(
-            '%s --count=1 --svr-exit=true --port=%d --log_msg=#EXIT# test_timing_10k_20clients' %
+            '%s --count=1 --svr-exit=true --port=%d --log_msg=@EXIT@ test_timing_10k_20clients' %
             (LOG_CLIENT_NAME, ServerClientTest.port)))
 
         delta = stop_timer(start, sleeper)

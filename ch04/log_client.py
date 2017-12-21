@@ -171,7 +171,7 @@ def mainline():
 
     # Conditionally send the exit message to the server.
     if params['svr_exit']:
-        send_msg(socket, '#EXIT#')
+        send_msg(socket, '@EXIT@')
 
     print('Client exiting')
     sys.exit(0)

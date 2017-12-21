@@ -20,9 +20,9 @@ def usage(exit_code):
 
         Terminate this program with Ctrl-C
         or:
-            Send a log message with #EXIT# in it.
-            Sending the log msg #EXIT# will cause a PUB msg
-            with #EXIT# as the message contents.
+            Send a log message with @EXIT@ in it.
+            Sending the log msg @EXIT@ will cause a PUB msg
+            with @EXIT@ as the message contents.
     """)
     sys.exit(exit_code)
 
@@ -114,7 +114,7 @@ def mainline():
 
     while True:
         msg = socket.recv()
-        if '#EXIT#' in msg:
+        if '@EXIT@' in msg:
             print('server Exiting')
             break
         msg_timestamp = '%s %s\n' % (str(datetime.now()), msg)
