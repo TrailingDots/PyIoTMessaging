@@ -1,4 +1,12 @@
-#!/bin/env python
+#!/usr/bin/env python
+
+""" DARWIN notes
+Just in case it's useful for someone like me looking to 
+blindly kill all processes using a given port: 
+lsof -i tcp:5000 | grep LISTEN | awk '{print $2}' | xargs kill 
+kills all processes listening on port 5000 
+"""
+
 def usage(exit_code):
     """Write a usage statment and exit."""
 
@@ -81,8 +89,8 @@ def listening(port,
     return N    # Indicate found N listeners
     return 0    # Indicates nobody listening
     """
-    if platform.system() != 'Linux':
-        sys.stderr.write('listeningPort available only under Linux!\n')
+    if platform.system() not in ['Darwin', 'Linux']:
+        sys.stderr.write('listeningPort available only under Linux and Darwin!\n')
         sys.exit(-1)
 
     fuser = find_executable('fuser')
@@ -115,7 +123,8 @@ def listening(port,
         sys.stderr.write(err + '\n')
     for line in out.splitlines():
         items = line.split()
-        if (len(items) > 0) and (items[0] != pid):     # Ignore all but requested pid
+        if (len(items) > 0) and (items[0] != pid):     
+            # Ignore all but requested pid
             continue
 
         # Kill the process if requested.
