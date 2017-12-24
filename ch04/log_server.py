@@ -1,5 +1,5 @@
 #!/usr/bin/env python
-def usage(exit_code):
+def usage():
     print(' '.join(sys.argv) + """\n
         Received logs don't get parsed or modified
         in any way, they just get written to the
@@ -24,13 +24,13 @@ def usage(exit_code):
             Sending the log msg @EXIT@ will cause a PUB msg
             with @EXIT@ as the message contents.
     """)
-    sys.exit(exit_code)
 
 import sys
 from datetime import datetime
 
 import zmq
 
+from log_client import EXIT_SERVER
 
 def process_cmd_line(argv):
     """
@@ -64,18 +64,21 @@ def process_cmd_line(argv):
                      ])
     except getopt.GetoptError as err:
         print str(err)
-        usage(1)
+        usage()
+        sys.exit(1)
 
     for opt, arg in opts:
         if opt == '--help':
-            usage(0)
+            usage()
+            sys.exit(0)
         if opt == '--port':
             try:
                 # port must be integer
                 _ = int(arg)
-            except Exception as err:
-                sys.stdout.write(str(err) + '\n')
-                usage(1)
+            except ValueError as err:
+                print('Invalid port number:%s' % err)
+                usage()
+                sys.exit(1)
             params['port'] = int(arg) # Must convert to integer
             continue
         if opt in ['--log-append', '--log_append']:
@@ -86,11 +89,8 @@ def process_cmd_line(argv):
             continue
     return params
 
-def mainline():
 
-    # If use has entered command line options, process them.
-    params = process_cmd_line(sys.argv[1:])
-
+def open_log_file_for_writing(params):
     # Open the log file for writing
     try:
         # Open log file with append. If problems, report and error out.
@@ -99,8 +99,23 @@ def mainline():
         wipe_or_append = 'a' if params['log_append'] else 'wa'
         log_file_handle = open(params['log_filename'], wipe_or_append)
     except Exception as err:
-        sys.stdout.write(str(err) + '\n')
-        usage(1)
+        # Due to the nature of this logic, this should never happen.
+        print('Invalid file open parameter:%s' % str(err))
+        usage()
+        sys.exit(1)
+    return log_file_handle
+
+
+def mainline():
+
+    # If use has entered command line options, process them.
+    params = process_cmd_line(sys.argv[1:])
+
+    # Announce our run-time parameters
+    print('log_server:log filename=%s, port=%d' % 
+            (params['log_filename'], params['port']))
+
+    log_file_handle = open_log_file_for_writing(params)
 
     # Establish a ZeroMQ Context and create a binding socket.
     context = zmq.Context()
@@ -109,16 +124,14 @@ def mainline():
     # Bind the socket to the port
     socket.bind('tcp://*:%d' % params['port'])
 
-    # Announce our run-time parameters
-    print('log_server:log filename=%s, port=%d' % (params['log_filename'], params['port']))
-
     while True:
         msg = socket.recv()
-        if '@EXIT@' in msg:
+        if EXIT_SERVER in msg:
             print('server Exiting')
             break
         msg_timestamp = '%s %s\n' % (str(datetime.now()), msg)
         log_file_handle.write(msg_timestamp)
+        # Comment out for production code. This slows the server down.
         log_file_handle.flush() # Insist on writing immediately
     sys.exit(0)
 

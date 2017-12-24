@@ -94,7 +94,7 @@ def listening(port,
                             stdout=subprocess.PIPE,
                             stderr=subprocess.STDOUT)
     line = proc.stdout.readline()
-    print('fuserline:%s' % line)
+    #print('fuserline:%s' % line)
     subproc_items = line.split()
     if len(subproc_items) == 0:
         if shortened is False:

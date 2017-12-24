@@ -7,12 +7,16 @@ Testing utility to send log messages to the server.
 This application simulates logs sent to
 the logging server.
 
+As a testing utility, this code has more
+run-time options that might be expected.
+
 The current hostname prefixes each message.
 
 Usage:
-    ./log_client_sender.py [--port=port#]
+    ./log_client.py [--port=port#]
             [--host=ahostname]
             [--log_msg=a_log_msg]
+            [--sleep=0]
             [--count=number_msgs]
 
 Where:
@@ -22,19 +26,25 @@ Where:
                           Default: 10000
     --host=ahostname    - The name of the host where server lives.
                           Default: localhost
+    --sleep=sec_sleep   - Seconds to sleep between messages.
     --svr-exit=true     - true to send exit msg to server at end
                           Default: false
     --log_msg=a_log_msg - The message to send to log server.
                           Default: 'A log message'
+                          --log_msg=@EXIT@   causes the server to exit.
     """)
     sys.exit(exit_code)
 
 
-import sys
 import platform
+import sys
+import time
 
 import zmq
 
+# Sending this as a message causes the server to exit.
+# The count also gets set to 1 after sending this message,
+EXIT_SERVER = '@EXIT@'
 
 def process_cmd_line(argv):
     """
@@ -58,6 +68,11 @@ def process_cmd_line(argv):
 
         # True to send exit message to server at end
         'svr_exit': False,
+
+        # Seconds to sleep between messages.
+        # May be a floating point number like 0.5 for a half a sec
+        'sleep': 0,
+
     }
 
 
@@ -68,6 +83,7 @@ def process_cmd_line(argv):
                     ['port=',       # Port number.
                      'host=',       # hostname
                      'count=',      # Number of messages to send
+                     'sleep=',      # Number of messages to send
                      'log_msg=',    # The log message to send to log server.
                      'log-msg=',    # The log message trivial alternative.
                      'svr-exit=',   # true to exit server at end
@@ -86,7 +102,7 @@ def process_cmd_line(argv):
                 # PORT must be positive integer
                 _ = int(arg)
             except Exception as err:
-                sys.stdout.write(str(err) + '\n')
+                print('Invalid port:%s' % str(err))
                 usage(1)
             params['port'] = int(arg)   # Must convert to integer
         if opt == '--count':
@@ -94,11 +110,19 @@ def process_cmd_line(argv):
                 # count must be positive integer
                 _ = int(arg)
             except Exception as err:
-                sys.stdout.write(str(err) + '\n')
+                print('Invalid message count:%s' % str(err))
                 usage(1)
             params['count'] = int(arg)  # Must convert to integer
             continue
-        # Notice that a common type gets handled.
+        if opt == '--sleep':
+            try:
+                # count must be positive integer
+                _ = float(arg)
+            except Exception as err:
+                print('Invalid sleep value:%s' % str(err))
+                usage(1)
+            params['sleep'] = float(arg)  # Must convert to integer
+            continue
         if opt in ['--log_msg', '--log-msg']:
             params['log_msg'] = arg
             continue
@@ -109,6 +133,9 @@ def process_cmd_line(argv):
             params['host'] = arg
             continue
 
+    if params['log_msg'] == EXIT_SERVER:
+        # Send one and only one message to the server.
+        params['count'] = 1
     return params
 
 
@@ -164,14 +191,17 @@ def mainline():
     context, socket = setup_zmq(params['host'], params['port'])
 
     log_msg = params['log_msg']
+    sleep = params['sleep']
     # Send the requested number of messages to the server
     for ndx in xrange(params['count']):
         msg = '%d: %s' % (ndx, log_msg)
         send_msg(socket, msg)
+        if sleep > 0:
+            time.sleep()
 
     # Conditionally send the exit message to the server.
     if params['svr_exit']:
-        send_msg(socket, '@EXIT@')
+        send_msg(socket, EXIT_SERVER)
 
     print('Client exiting')
     sys.exit(0)

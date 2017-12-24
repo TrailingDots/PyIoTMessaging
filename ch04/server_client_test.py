@@ -1,386 +1,253 @@
 #!/usr/bin/env python
 #
-# Test suite for log_server.py and log_client.py
+# Test suite for command line interfaces of
+# log_server.py and log_client.py
 #
-# If any tests hang, run this in a terminal to find
-# the hanging processes:
-#    ps aux | egrep log_client\|log_server
-#
-# After running these tests, the above command line
-# should run and indicate *no* hanging processes
-# as a result of these integration tests.
-#
+"""
+An important idea is unittest catching sys.exit():
+    with self.assertRaises(SystemExit):
+    your_method()
+Instances of SystemExit have an attribute code which is set
+to the proposed exit status, and the context manager returned
+by assertRaises has the caught exception instance as
+exception, so checking the exit status is easy:
 
-import datetime         # for timing
+with self.assertRaises(SystemExit) as cm:
+    your_method()
+
+self.assertEqual(cm.exception.code, 1)
+
+References:
+http://docs.python.org/2/library/sys.html#sys.exit
+http://lists.idyll.org/pipermail/testing-in-python/2010-August/003261.html
+"""
+
+
 import functools
 import os
 import sys
-import subprocess       # To spawn subprocesses
-import time
 import unittest
 
-from listening_port import listening, is_listening
-import log_client 
+import pdb
+
 import log_server
-from named_kill import find_procs_by_name
+import log_client
 
 # Names of client and server python scripts.
 LOG_SERVER_NAME = './log_server.py'
 LOG_CLIENT_NAME = './log_client.py'
 
-# NOISY == True prints trace messages that might
-# assist in debugging.
-NOISY = True
-
 
 def function_name():
-    # function (getting the name of the previous frame)
+    # Used to highlight the currently running test.
+    # Calling function name (getting the name of the previous frame)
     # For the curr func: print sys._getframe().f_code.co_name
     return sys._getframe().f_back.f_code.co_name
 
+FCN_FMT = '\n\n========== %s =========='
 
-def print_function_name():
-    print('\n\n========== %s ==========' % function_name())
 
-class ServerCmdLineTest(unittest.TestCase):
-    """Test the various options available from the command
+def str_to_argv(str):
+    """Given a string, split it into a list separate at
+    each blank. This converts a string into the sys.argv
+    structure.
+    The string should have the exact same values
+    as entered on the command line.
+    """
+    return str.split()
+
+
+class LogServerCmdLineTest(unittest.TestCase):
+    """
+    Test the various options available from the command
     line to run the log_server.py.
     """
-    import log_server
 
-    def setUp(self):
-        kill_listening_processes(ServerClientTest.port)
-
-    # In testing for invalid command line operations,
-    # this should always be None, meaning the log_server
-    # could not start.
-    log_server_proc = None
-
-
-    def test_echo(self):
-
-        print('\n\n========== %s ==========' % function_name())
-
-        proc = create_process_with_stderr(
-                ['/usr/bin/echo', 'hello world'])
-        print('proc:%r', proc)
-        print('proc_dict__:%r', proc.__dict__)
-
-        xproc = create_process_with_stderr(
-                '/usr/bin/Xecho hello world')
-        print('xproc:%r', xproc)
-        print('xproc_dict__:%r', xproc.__dict__)
-
-
-    def test_invalid_option(self):
+    def test_server_invalid_option(self):
         """An invalid/unknown option fails."""
 
-        print('\n\n========== %s ==========' % function_name())
+        print(FCN_FMT % function_name())
 
+        argv = str_to_argv('%s --Xlog=log.log --log_append=False --port=5555' %
+                LOG_SERVER_NAME)
+        with self.assertRaises(SystemExit) as cm:
+            log_server.process_cmd_line(argv[1:])
+        self.assertEqual(cm.exception.code, 1)
 
-        # Attempt to create a server with an invalid option
-        # No such option: --Xlog
-        log_server_proc = create_process_with_stderr(
-                '%s --Xlog=%s --log_append=False --port=5555' %
-            (LOG_SERVER_NAME, 'log.log'))
-        self.assertEqual(0, log_server_proc.returncode)
-
-
-    def test_invalid_port(self):
+    def test_server_invalid_port(self):
         """Pass various values of invalid ports"""
 
-        print('\n\n========== %s ==========' % function_name())
+        print(FCN_FMT % function_name())
 
         # Non-numeric port number
-        bad_port_proc = create_process_with_stderr('%s --port=%s' %
-            (LOG_SERVER_NAME, 'abc'))
-        print('bad_port_proc:%r' % bad_port_proc.__dict__)
+        argv = str_to_argv('%s --port=%s' % (LOG_SERVER_NAME, 'abc'))
+        with self.assertRaises(SystemExit) as cm:
+            log_server.process_cmd_line(argv)
+        self.assertEqual(cm.exception.code, 1)
 
+    def test_server_log_append_both_ways(self):
+        """Test both spellings of log-append as an option"""
 
-def accum_sleep_time(sleep_time):
-    """Accumulate the total sleep time. The server does not
-    know the queue size so the delay in sleep allows the
-    server to catch up with queue values. YUCK! I HATE
-    forced delays.
-    """
-    time.sleep(sleep_time)
+        print(FCN_FMT % function_name())
 
+        argv = str_to_argv('%s --log-append=true')
+        params = log_server.process_cmd_line(argv)
+        self.assertEqual(True, params['log_append'])
 
-def stop_timer(start, sleeper):
-    """Given a start time and the sleep time,
-    return the delta suitable for printing via %s"""
-    stop = datetime.datetime.now()
-    delta = stop - (start + datetime.timedelta(0, sleeper))
-    return delta
+        argv = str_to_argv('%s --log_append=true')
+        params = log_server.process_cmd_line(argv)
+        self.assertEqual(True, params['log_append'])
 
-
-def create_process(cmd_line):
-    """Create a subprocess and start it running."""
-    if NOISY:
-        print('create_process:%r' % cmd_line)
-    proc = subprocess.Popen(cmd_line, shell=True)
-    return proc
-
-def create_process_with_stderr(cmd_line):
-    """Create a process with stderr sent to stdout.
-    Start it running but don't wait.
-    Generally use for test that expect to fail."""
-    #import pdb; pdb.set_trace()
-    time.sleep(1)
-    if NOISY:
-        print('create_process_with_stderr %s' % cmd_line)
-    try:
-        proc = subprocess.Popen(cmd_line, 
-                                shell=True,
-                                stderr=subprocess.STDOUT)
-    except subprocess.CalledProcessError as err:
-        print('ERROR:CalledProcessError: %s' % err)
-        return -1
-    except Exception as err:
-        print('ERROR:Error: %s' % err)
-        return -2
-    else:
-        # Process ran. Got something as output.
-        print('output:\n%s' % proc)
-    finally:
-        time.sleep(1)
-
-    return proc
-
-
-def load_file(filename):
-    """Read a file into memory and return that file."""
-    if not os.path.isfile(filename):
-        return None
-    with open(filename, 'r') as content_file:
-        content = content_file.read()
-    return content
-
-
-def count_lines_in_file(filename):
-    wc_out, wc_err = subprocess.Popen('/usr/bin/wc -l %s' % filename,
-            shell=True,
-            stdout=subprocess.PIPE,
-            stderr=subprocess.STDOUT).communicate()
-
-    if NOISY:
-        print('wc_out:%s' % wc_out)
-    try:
-        wc_count = int(wc_out.split(' ')[0])
-    except ValueError:
-        print('unexpected value in return from wc:%s:' % (err, wc_out))
-    return wc_count
-
-
-def kill_listening_processes(port):
-    """
-    Determine if this port has been assigned
-    If any procss are listening, attempt to kill them.
-    Answers # listeners.
-    If 0 listeners, then proceed.
-    If non-0, then the test should not proceed.
-    """
-    port_status = listening(port, kill=True)
-    if not port_status == 0:
-        print('For port %s, listeners:%d' % (port, port_status))
-        port_status = is_listening(port)
-        if not port_status == 0:
-            print('port %d: Attempted to kill, but %d listeners remain' % \
-                    (port, port_status))
-            return port_status
-    return 0    # No listeners
-
-
-def get_line_count(log_name):
-    """Given a log file name, 
-    answer the number of lines in that log file.
-    """
-
-    data = load_file(log_name)
-
-    """
-     Log file must have 'count' lines.
-     This could be better - could use regex to determine
-     if the logged data meets expectations.
-    """
-    return  count_lines_in_file(log_name)
-
-@unittest.skip('skipping ServerClientTest')
-class ServerClientTest(unittest.TestCase):
-
-    # Port value used by all tests.
-    port = 5555
-
-    def setUp(self):
-        kill_listening_processes(ServerClientTest.port)
-
-    def test_happy_path(self):
-        """Test the happy path where parameters
-        provide a simple and happy logging environment.
-
-        python -m unittest server_client_test.ServerClientTest.test_happy_path
+    def test_server_open_log_file_for_writing(self):
+        """Test opening the log file.
+        First, use the cmd line to create valid params.
+        Second, call the open log function.
+        Pass both invalid and valid moves and log names.
         """
+        print(FCN_FMT % function_name())
 
-        print function_name()
+        # Cannot write to root directory, /
+        argv = str_to_argv('%s --log=/' % LOG_SERVER_NAME)
+        with self.assertRaises(SystemExit) as cm:
+            params = log_server.process_cmd_line(argv)
+            log_server.open_log_file_for_writing(params)
+        self.assertEqual(cm.exception.code, 1)
 
-        log_name = 'happy.log'
-        count = 10  # logs from client to server
+        # Cannot write to file as permission denied
+        argv = str_to_argv('%s --log=/var/log/messages' % LOG_SERVER_NAME)
+        with self.assertRaises(SystemExit) as cm:
+            params = log_server.process_cmd_line(argv)
+            log_server.open_log_file_for_writing(params)
+        self.assertEqual(cm.exception.code, 1)
 
-        # Create a server
-        server_proc = create_process('%s --log=%s --log_append=False --port=%d' %
-            (LOG_SERVER_NAME, log_name, ServerClientTest.port))
+        # Can write to file in /tmp
+        filename = '/tmp/ABCDEF'
+        argv = str_to_argv('%s --log=%s --log-append=true' %
+                (LOG_SERVER_NAME, filename))
+        params = log_server.process_cmd_line(argv)
+        log_file_handle = log_server.open_log_file_for_writing(params)
+        self.assertEqual(log_file_handle.name, filename)
+        self.assertEqual(params['log_append'], True)
 
-        # Create a client and send logs
-        client_proc = create_process('%s --svr-exit=true --count=%d --port=%d' %
-            (LOG_CLIENT_NAME, count, ServerClientTest.port))
-        time.sleep(1)
-        self.assertEqual(count, get_line_count(log_name))
+        # Can write to file in /tmp and insist on append mode.
+        filename = '/tmp/ABCDEF'
+        argv = str_to_argv('%s --log=%s --log_append=false' %
+            (LOG_SERVER_NAME, filename))
+        params = log_server.process_cmd_line(argv)
+        log_file_handle = log_server.open_log_file_for_writing(params)
+        self.assertEqual(log_file_handle.name, filename)
+        self.assertEqual(params['log_append'], False)
 
+        # Can write to file in /tmp and insist on append mode.
+        # Any non 'true' string results in false append.
+        filename = '/tmp/ABCDEF'
+        argv = str_to_argv('%s --log=%s --log_append=FooBar' %
+            (LOG_SERVER_NAME, filename))
+        params = log_server.process_cmd_line(argv)
+        log_file_handle = log_server.open_log_file_for_writing(params)
+        self.assertEqual(log_file_handle.name, filename)
+        self.assertEqual(params['log_append'], False)
 
-    def test_two_clients(self):
-        """A happy path where 2 clients log with parameters
-        that should cause no problems.
-        """
-
-        print function_name()
-
-        log_name = '2clients.log'
-        count = 10000   # 10k logs
-        sleeper = 4     # Sleep time to allow server to process.
-
-        # Create a client and send count logs
-        client_proc1 = create_process('%s --count=%d --port=%d --log_msg=Client1' %
-            (LOG_CLIENT_NAME, count, ServerClientTest.port))
-
-        # Create another client and send count logs
-        client_proc2 = create_process('%s --count=%d --port=%d --log_msg=Client2' %
-            (LOG_CLIENT_NAME, count, ServerClientTest.port))
-
-        # Create a server
-        server_proc = create_process('%s --log_append=False --log=%s --port=%d' % 
-            (LOG_SERVER_NAME, log_name, ServerClientTest.port))
-
-        # Wait for the 2 clients to terminate
-        client_proc1.communicate()
-        client_proc2.communicate()
-
-        # Need to sleep because the server has not had time
-        # to process all the logs.
-        accum_sleep_time(sleeper)
-
-        # Create another client simply to exit
-        # If the sleep time is too short, the buffered logs
-        # in the server get dropped. This yields a false negative.
-        client_exit = create_process('%s --svr-exit=true --count=1 --port=%d --log_msg=@EXIT@ test_two_clients' %
-            (LOG_CLIENT_NAME, ServerClientTest.port))
-
-        self.assertEqual(2*count, get_line_count(log_name))
-
-    '''
-    def test_timing_100k(self):
-        """Time sending 10000 simple logs."""
-        log_count = 100000    # Number of l0gs to send.
-        log_name = '100k.log'
-        sleeper = 15          # Time to sleep and let the server write the data.
-        print function_name()
+    def test_server_all_params_changed(self):
+        """Test that all changed params get picked up"""
+        print(FCN_FMT % function_name())
+        filename = '/tmp/ABCDEF'
+        argv = str_to_argv('%s --log=%s --log_append=blah --port=12345' %
+            (LOG_SERVER_NAME, filename))
+        params = log_server.process_cmd_line(argv)
+        log_file_handle = log_server.open_log_file_for_writing(params)
+        self.assertEqual(log_file_handle.name, filename)
+        self.assertEqual(params['log_append'], False)
+        self.assertEqual(params['port'], 12345)
 
 
-        start = datetime.datetime.now()
-
-        # Create a client and send logs
-        client_proc1 = create_process('%s --svr_exit=true --count=%d --port=%d --log_msg="100k logs"' %
-            (LOG_CLIENT_NAME, log_count, ServerClientTest.port))
-
-        # Create a server
-        server_proc = create_process('%s --log_append=False --log=%s --port=%d' %
-            (LOG_SERVER_NAME, log_name, ServerClientTest.port))
-
-        accum_sleep_time(sleeper)
-
-        delta = stop_timer(start, sleeper)
-        print('Time to send %d logs:%s' % (log_count, delta))
-
-        self.assertEqual(log_count, get_line_count(log_name) )
-    '''
-
-    def test_timing_10k_20clients(self):
-        """Time sending 1000 logs from each of 20 clients."""
-
-        log_count = 1000     # Number of l0gs to send.
-        log_name = '20client.log'
-        number_clients = 10  # Number of clients banging on the server
-        sleeper = 4          # Time is sec to let server write lots.
-
-        print function_name()
-
-        # Create another client simply to exit
-        start = datetime.datetime.now()
-
-        if NOISY:
-            print(' Create a server, port%d' % ServerClientTest.port)
-        server_proc = create_process('%s --log_append=False --log=%s --port=%d' %
-            (LOG_SERVER_NAME, log_name, ServerClientTest.port))
-
-        client_list = []
-        for ndx in range(number_clients):
-            # Create a client and send log_count logs
-            client_list.append(create_process(
-                '%s --count=%d --port=%d --log_msg="client %d"' %
-                (LOG_CLIENT_NAME, log_count, ServerClientTest.port, ndx)))
-
-        if NOISY:
-            print(' Wait for all %d clients to exit' % len(client_list))
-        for client in client_list:
-            out, err = client.communicate()     # Wait for client to exit
-            client_ret_code = client.wait()
-            if NOISY:
-                print('status return code: %d, client: %r' % (client_ret_code, client.pid))
-            if not (client_ret_code == 0):
-                print('Non-zero return: %d, client: %r', (client_ret_code, client.pid))
-
-        if NOISY:
-            print(' All clients finished. Sleep 4 sec to allow server to catch up.')
-        accum_sleep_time(sleeper)
-
-        if NOISY:
-            print(' Sending @EXIT@ to the server')
-        client_list.append(create_process(
-            '%s --count=1 --svr-exit=true --port=%d --log_msg=@EXIT@ test_timing_10k_20clients' %
-            (LOG_CLIENT_NAME, ServerClientTest.port)))
-
-        delta = stop_timer(start, sleeper)
-        print('Time to send %d logs:%s' % (number_clients*log_count, delta))
-
-        self.assertEqual(number_clients*log_count, get_line_count(log_name))
-
-
-def list_hanging_processes():
-    """List any hanging processes related to these tests.
-    This test provides only a rough guess as it does not
-    account for our port assignment. Other ports may
-    get included if they seek active processing.
-
-    The caller must decide if these reported processes
-    must be killed.
-
-    Returns count of hanging processes.
+class LogClientCmdLineTest(unittest.TestCase):
+    """
+    Test the various options available from the command
+    line to run the log_client.py.
     """
 
-    print('\n-----------------\nlist_hanging_processes:')
-    hanging = 0
-    for proc in ['log_client', 'log_server']:
-        pid_list = find_procs_by_name('log_client')
-        for pid, cmdline in pid_list:
-            hanging += 1
-            print('%s\t%s' % (pid, cmdline))
-    return hanging
+    def test_client_invalid_option(self):
+        """Try to use an invalid option"""
+
+        print(FCN_FMT % function_name())
+
+        argv = str_to_argv('%s --Xport=12345' % LOG_CLIENT_NAME)
+        with self.assertRaises(SystemExit) as cm:
+            log_client.process_cmd_line(argv[1:])
+        self.assertEqual(cm.exception.code, 1)
+
+    def test_client_invalid_count(self):
+        """Pass an invalid message count"""
+        print(FCN_FMT % function_name())
+
+        argv = str_to_argv('%s --port=12345 --count=XYZ' % LOG_CLIENT_NAME)
+        with self.assertRaises(SystemExit) as cm:
+            log_client.process_cmd_line(argv[1:])
+        self.assertEqual(cm.exception.code, 1)
+
+    def test_client_valid_int_sleep(self):
+        """Pass valid sleep duration"""
+        print(FCN_FMT % function_name())
+
+        argv = str_to_argv('%s --port=12345 --sleep=2' % LOG_CLIENT_NAME)
+        params = log_client.process_cmd_line(argv[1:])
+        self.assertAlmostEqual(params['sleep'], 2.0)
+
+    def test_client_valid_float_sleep(self):
+        """Pass valid sleep duration"""
+        print(FCN_FMT % function_name())
+
+        argv = str_to_argv('%s --port=12345 --sleep=1.5' % LOG_CLIENT_NAME)
+        params = log_client.process_cmd_line(argv[1:])
+        self.assertAlmostEqual(params['sleep'], 1.5)
+
+    def test_client_invalid_sleep(self):
+        """Pass an invalid sleep duration"""
+        print(FCN_FMT % function_name())
+
+        argv = str_to_argv('%s --port=12345 --sleep=XYZ' % LOG_CLIENT_NAME)
+        with self.assertRaises(SystemExit) as cm:
+            log_client.process_cmd_line(argv[1:])
+        self.assertEqual(cm.exception.code, 1)
+
+    def test_client_end_msg_to_server(self):
+        """Sending EXIT_SERVER to the server changes the count to 1.
+        Otherwise the client will wait to send the remainder
+        of the count messages."""
+        print(FCN_FMT % function_name())
+        argv = str_to_argv('%s --log_msg=%s --count=10000' %
+                (LOG_CLIENT_NAME, log_client.EXIT_SERVER))
+        params = log_client.process_cmd_line(argv[1:])
+        self.assertEqual(params['count'], 1)
+        self.assertEqual(params['log_msg'], log_client.EXIT_SERVER)
+        self.assertEqual(params['sleep'], 0)
+
+    def test_client_all_params_changed(self):
+        """Change all params from their defaults and check for valid"""
+        print(FCN_FMT % function_name())
+        port = 12345
+        count = 10
+        host = '192.168.1.80'
+        log_msg = 'a_message'
+        svr_exit = 'blah'
+        sleep = 3.1416
+        argv = str_to_argv(
+            '%s --port=%d --count=%d --sleep=3.1416 --host=%s --log_msg=%s --svr_exit=%s' %
+            (LOG_CLIENT_NAME, port, count, host, log_msg, svr_exit))
+        params = log_client.process_cmd_line(argv[1:])
+        self.assertEqual(params['port'], port)
+        self.assertEqual(params['count'], count)
+        self.assertEqual(params['host'], host)
+        self.assertEqual(params['log_msg'], log_msg)
+        self.assertEqual(params['svr_exit'], False)
+        self.assertAlmostEqual(params['sleep'], sleep)
+
 
 
 if __name__ == '__main__':
     unittest.main(exit=False)
+    #print 'after unittest.main()'
 
-    # Ensure that no hanging processes exist.
-    hanging = list_hanging_processes()
-    print('Number of hanging processes: %d' % hanging)
     sys.exit(0)
 
