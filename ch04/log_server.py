@@ -1,6 +1,6 @@
 #!/usr/bin/env python
 def usage(exit_code):
-    print("""
+    print(' '.join(sys.argv) + """\n
         Received logs don't get parsed or modified
         in any way, they just get written to the
         log file.
@@ -32,7 +32,7 @@ from datetime import datetime
 import zmq
 
 
-def process_cmd_line():
+def process_cmd_line(argv):
     """
     Command line code to handle user params
     """
@@ -55,7 +55,7 @@ def process_cmd_line():
     import getopt
     try:
         opts, _ = getopt.gnu_getopt(
-                    sys.argv[1:], '',
+                argv, '',
                     ['port=',       # Port number.
                      'log=',        # Name of log file.
                      'log-append=', # Append to existing log or not?
@@ -89,7 +89,7 @@ def process_cmd_line():
 def mainline():
 
     # If use has entered command line options, process them.
-    params = process_cmd_line()
+    params = process_cmd_line(sys.argv[1:])
 
     # Open the log file for writing
     try:

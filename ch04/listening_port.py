@@ -1,4 +1,4 @@
-#!/bin/env python
+#!/usr/bin/env python
 def usage(exit_code):
     """Write a usage statment and exit."""
 

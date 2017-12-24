@@ -1,7 +1,7 @@
 #!/usr/bin/env python
 
 def usage(exit_code):
-    print("""
+    print(' '.join(sys.argv) + """\n
 Testing utility to send log messages to the server.
 
 This application simulates logs sent to
@@ -36,7 +36,7 @@ import platform
 import zmq
 
 
-def process_cmd_line():
+def process_cmd_line(argv):
     """
     Command line code to handle user params
     """
@@ -64,7 +64,7 @@ def process_cmd_line():
     import getopt
     try:
         opts, _ = getopt.getopt(
-                    sys.argv[1:], '',
+                    argv, '',
                     ['port=',       # Port number.
                      'host=',       # hostname
                      'count=',      # Number of messages to send
@@ -153,7 +153,7 @@ def mainline():
     """
 
     # If the user has entered command line options, process them
-    params = process_cmd_line()
+    params = process_cmd_line(sys.argv[1:])
 
     # Announce our run-time parameters
     print('%s --host=%s --port=%d --count=%d --svr_exit=%s --log_msg="%s"' %

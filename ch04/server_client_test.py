@@ -42,6 +42,60 @@ def function_name():
 def print_function_name():
     print('\n\n========== %s ==========' % function_name())
 
+class ServerCmdLineTest(unittest.TestCase):
+    """Test the various options available from the command
+    line to run the log_server.py.
+    """
+    import log_server
+
+    def setUp(self):
+        kill_listening_processes(ServerClientTest.port)
+
+    # In testing for invalid command line operations,
+    # this should always be None, meaning the log_server
+    # could not start.
+    log_server_proc = None
+
+
+    def test_echo(self):
+
+        print('\n\n========== %s ==========' % function_name())
+
+        proc = create_process_with_stderr(
+                ['/usr/bin/echo', 'hello world'])
+        print('proc:%r', proc)
+        print('proc_dict__:%r', proc.__dict__)
+
+        xproc = create_process_with_stderr(
+                '/usr/bin/Xecho hello world')
+        print('xproc:%r', xproc)
+        print('xproc_dict__:%r', xproc.__dict__)
+
+
+    def test_invalid_option(self):
+        """An invalid/unknown option fails."""
+
+        print('\n\n========== %s ==========' % function_name())
+
+
+        # Attempt to create a server with an invalid option
+        # No such option: --Xlog
+        log_server_proc = create_process_with_stderr(
+                '%s --Xlog=%s --log_append=False --port=5555' %
+            (LOG_SERVER_NAME, 'log.log'))
+        self.assertEqual(0, log_server_proc.returncode)
+
+
+    def test_invalid_port(self):
+        """Pass various values of invalid ports"""
+
+        print('\n\n========== %s ==========' % function_name())
+
+        # Non-numeric port number
+        bad_port_proc = create_process_with_stderr('%s --port=%s' %
+            (LOG_SERVER_NAME, 'abc'))
+        print('bad_port_proc:%r' % bad_port_proc.__dict__)
+
 
 def accum_sleep_time(sleep_time):
     """Accumulate the total sleep time. The server does not
@@ -65,6 +119,32 @@ def create_process(cmd_line):
     if NOISY:
         print('create_process:%r' % cmd_line)
     proc = subprocess.Popen(cmd_line, shell=True)
+    return proc
+
+def create_process_with_stderr(cmd_line):
+    """Create a process with stderr sent to stdout.
+    Start it running but don't wait.
+    Generally use for test that expect to fail."""
+    #import pdb; pdb.set_trace()
+    time.sleep(1)
+    if NOISY:
+        print('create_process_with_stderr %s' % cmd_line)
+    try:
+        proc = subprocess.Popen(cmd_line, 
+                                shell=True,
+                                stderr=subprocess.STDOUT)
+    except subprocess.CalledProcessError as err:
+        print('ERROR:CalledProcessError: %s' % err)
+        return -1
+    except Exception as err:
+        print('ERROR:Error: %s' % err)
+        return -2
+    else:
+        # Process ran. Got something as output.
+        print('output:\n%s' % proc)
+    finally:
+        time.sleep(1)
+
     return proc
 
 
@@ -125,6 +205,7 @@ def get_line_count(log_name):
     """
     return  count_lines_in_file(log_name)
 
+@unittest.skip('skipping ServerClientTest')
 class ServerClientTest(unittest.TestCase):
 
     # Port value used by all tests.
@@ -272,25 +353,6 @@ class ServerClientTest(unittest.TestCase):
 
         self.assertEqual(number_clients*log_count, get_line_count(log_name))
 
-class CommandLineTest(unittest.TestCase):
-    """This class test the command line handling."""
-
-    # Port value used by all tests.
-    port = 5555
-
-    def setUp(self):
-        kill_listening_processes(ServerClientTest.port)
-
-    def InvalidPortTest(self):
-        """Pass various values of invalid ports"""
-
-        print function_name()
-
-        # Non-numeric port number
-        bad_port = create_process('%s --svr-exit=true --port=%d' %
-            (LOG_CLIENT_NAME, 1, 'abc'))
-        print('bad_port:%s' % bad_port)
-
 
 def list_hanging_processes():
     """List any hanging processes related to these tests.
@@ -313,11 +375,6 @@ def list_hanging_processes():
             print('%s\t%s' % (pid, cmdline))
     return hanging
 
-def suite():
-    test_suite = unittest.makeSuite(ServerClientTest)
-    return unittest.TestCaseSuite((
-            testSuite,
-        ))
 
 if __name__ == '__main__':
     unittest.main(exit=False)
