@@ -232,8 +232,9 @@ class LogClientCmdLineTest(unittest.TestCase):
         log_msg = 'a_message'
         svr_exit = 'blah'
         sleep = 3.1416
+        echo = True
         argv = str_to_argv(
-            '%s --port=%d --count=%d --sleep=3.1416 --host=%s --log_msg=%s --svr_exit=%s' %
+            '%s --port=%d --count=%d --echo=True --sleep=3.1416 --host=%s --log_msg=%s --svr_exit=%s' %
             (LOG_CLIENT_NAME, port, count, host, log_msg, svr_exit))
         params = log_client.process_cmd_line(argv[1:])
         self.assertEqual(params['port'], port)
@@ -241,6 +242,7 @@ class LogClientCmdLineTest(unittest.TestCase):
         self.assertEqual(params['host'], host)
         self.assertEqual(params['log_msg'], log_msg)
         self.assertEqual(params['svr_exit'], False)
+        self.assertEqual(params['echo'], True)
         self.assertAlmostEqual(params['sleep'], sleep)
 
 

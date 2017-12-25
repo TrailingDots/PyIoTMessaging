@@ -23,7 +23,7 @@ Where:
     --port=port#        - The port number for messaging.
                           Default: 5555
     --count=number_msgs - The # messages to send to log server.
-                          Default: 10000
+                          Default: 10
     --host=ahostname    - The name of the host where server lives.
                           Default: localhost
     --sleep=sec_sleep   - Seconds to sleep between messages.
@@ -42,9 +42,23 @@ import time
 
 import zmq
 
-# Sending this as a message causes the server to exit.
-# The count also gets set to 1 after sending this message,
-EXIT_SERVER = '@EXIT@'
+from log_server import (EXIT_SERVER, 
+                       ECHO_SERVER_FALSE, 
+                       ECHO_SERVER_TRUE)
+
+
+def dict_to_cmd_string(params):
+    """Utility to format run-time parameters as if
+    they came from the command line.
+    
+    Input: The params as created by process_cmd_line.
+    Output: Formatted string of run-time switches."""
+
+    out = ""
+    for key, value in params.items():
+        out = out + ('%s=%s ' % (key, value))
+    return out
+
 
 def process_cmd_line(argv):
     """
@@ -61,7 +75,7 @@ def process_cmd_line(argv):
         'host': 'localhost',
 
         # Number of messages to send to log server
-        'count': 10000,
+        'count': 10,
 
         # The log message to send to log_server
         'log_msg': 'A log message',
@@ -133,9 +147,16 @@ def process_cmd_line(argv):
             params['host'] = arg
             continue
 
-    if params['log_msg'] == EXIT_SERVER:
+    if params['log_msg'] == EXIT_SERVER or \
+       params['log_msg'] == ECHO_SERVER_FALSE or \
+       params['log_msg'] == ECHO_SERVER_TRUE:
         # Send one and only one message to the server.
         params['count'] = 1
+
+    # Announce our run-time parameters
+    print('%s %s' %
+            (sys.argv[0], dict_to_cmd_string(params)))
+
     return params
 
 
@@ -182,11 +203,6 @@ def mainline():
     # If the user has entered command line options, process them
     params = process_cmd_line(sys.argv[1:])
 
-    # Announce our run-time parameters
-    print('%s --host=%s --port=%d --count=%d --svr_exit=%s --log_msg="%s"' %
-            (sys.argv[0], params['host'], params['port'], params['count'],
-                params['svr_exit'], params['log_msg']))
-
     # Create the ZeroMQ context and socket.
     context, socket = setup_zmq(params['host'], params['port'])
 
@@ -197,7 +213,7 @@ def mainline():
         msg = '%d: %s' % (ndx, log_msg)
         send_msg(socket, msg)
         if sleep > 0:
-            time.sleep()
+            time.sleep(sleep)
 
     # Conditionally send the exit message to the server.
     if params['svr_exit']:
