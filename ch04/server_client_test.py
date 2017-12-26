@@ -1,34 +1,11 @@
 #!/usr/bin/env python
-#
-# Test suite for command line interfaces of
-# log_server.py and log_client.py
-#
 """
-An important idea is unittest catching sys.exit():
-    with self.assertRaises(SystemExit):
-    your_method()
-Instances of SystemExit have an attribute code which is set
-to the proposed exit status, and the context manager returned
-by assertRaises has the caught exception instance as
-exception, so checking the exit status is easy:
-
-with self.assertRaises(SystemExit) as cm:
-    your_method()
-
-self.assertEqual(cm.exception.code, 1)
-
-References:
-http://docs.python.org/2/library/sys.html#sys.exit
-http://lists.idyll.org/pipermail/testing-in-python/2010-August/003261.html
+Test suite for command line interfaces of
+log_server.py and log_client.py
 """
 
-
-import functools
-import os
 import sys
 import unittest
-
-import pdb
 
 import log_server
 import log_client
@@ -39,22 +16,24 @@ LOG_CLIENT_NAME = './log_client.py'
 
 
 def function_name():
-    # Used to highlight the currently running test.
-    # Calling function name (getting the name of the previous frame)
-    # For the curr func: print sys._getframe().f_code.co_name
+    """Used to highlight the currently running test.
+    Calling function name (getting the name of the previous frame)
+    For the curr func: print sys._getframe().f_code.co_name.
+    (Yes, this accesses a protected member!"""
     return sys._getframe().f_back.f_code.co_name
+
 
 FCN_FMT = '\n\n========== %s =========='
 
 
-def str_to_argv(str):
+def str_to_argv(astr):
     """Given a string, split it into a list separate at
     each blank. This converts a string into the sys.argv
     structure.
     The string should have the exact same values
     as entered on the command line.
     """
-    return str.split()
+    return astr.split()
 
 
 class LogServerCmdLineTest(unittest.TestCase):
@@ -85,7 +64,7 @@ class LogServerCmdLineTest(unittest.TestCase):
             log_server.process_cmd_line(argv)
         self.assertEqual(cm.exception.code, 1)
 
-    def test_server_log_append_both_ways(self):
+    def test_server_log_append(self):
         """Test both spellings of log-append as an option"""
 
         print(FCN_FMT % function_name())
@@ -98,7 +77,7 @@ class LogServerCmdLineTest(unittest.TestCase):
         params = log_server.process_cmd_line(argv)
         self.assertEqual(True, params['log_append'])
 
-    def test_server_open_log_file_for_writing(self):
+    def test_server_open_log_file(self):
         """Test opening the log file.
         First, use the cmd line to create valid params.
         Second, call the open log function.
@@ -242,14 +221,10 @@ class LogClientCmdLineTest(unittest.TestCase):
         self.assertEqual(params['host'], host)
         self.assertEqual(params['log_msg'], log_msg)
         self.assertEqual(params['svr_exit'], False)
-        self.assertEqual(params['echo'], True)
+        self.assertEqual(params['echo'], echo)
         self.assertAlmostEqual(params['sleep'], sleep)
 
 
-
 if __name__ == '__main__':
-    unittest.main(exit=False)
-    #print 'after unittest.main()'
-
-    sys.exit(0)
+    unittest.main()
 
