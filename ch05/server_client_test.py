@@ -49,9 +49,9 @@ class LogServerCmdLineTest(unittest.TestCase):
 
         argv = str_to_argv('%s --Xlog=log.log --log_append=False --port=5555' %
                 LOG_SERVER_NAME)
-        with self.assertRaises(SystemExit) as cm:
+        with self.assertRaises(SystemExit) as err:
             log_server.process_cmd_line(argv[1:])
-        self.assertEqual(cm.exception.code, 1)
+        self.assertEqual(err.exception.code, 1)
 
     def test_server_invalid_port(self):
         """Pass various values of invalid ports"""
@@ -60,9 +60,9 @@ class LogServerCmdLineTest(unittest.TestCase):
 
         # Non-numeric port number
         argv = str_to_argv('%s --port=%s' % (LOG_SERVER_NAME, 'abc'))
-        with self.assertRaises(SystemExit) as cm:
+        with self.assertRaises(SystemExit) as err:
             log_server.process_cmd_line(argv)
-        self.assertEqual(cm.exception.code, 1)
+        self.assertEqual(err.exception.code, 1)
 
     def test_server_log_append(self):
         """Test both spellings of log-append as an option"""
@@ -87,17 +87,17 @@ class LogServerCmdLineTest(unittest.TestCase):
 
         # Cannot write to root directory, /
         argv = str_to_argv('%s --log=/' % LOG_SERVER_NAME)
-        with self.assertRaises(SystemExit) as cm:
+        with self.assertRaises(SystemExit) as err:
             params = log_server.process_cmd_line(argv)
             log_server.open_log_file_for_writing(params)
-        self.assertEqual(cm.exception.code, 1)
+        self.assertEqual(err.exception.code, 1)
 
         # Cannot write to file as permission denied
         argv = str_to_argv('%s --log=/var/log/messages' % LOG_SERVER_NAME)
-        with self.assertRaises(SystemExit) as cm:
+        with self.assertRaises(SystemExit) as err:
             params = log_server.process_cmd_line(argv)
             log_server.open_log_file_for_writing(params)
-        self.assertEqual(cm.exception.code, 1)
+        self.assertEqual(err.exception.code, 1)
 
         # Can write to file in /tmp
         filename = '/tmp/ABCDEF'
@@ -152,18 +152,18 @@ class LogClientCmdLineTest(unittest.TestCase):
         print(FCN_FMT % function_name())
 
         argv = str_to_argv('%s --Xport=12345' % LOG_CLIENT_NAME)
-        with self.assertRaises(SystemExit) as cm:
+        with self.assertRaises(SystemExit) as err:
             log_client.process_cmd_line(argv[1:])
-        self.assertEqual(cm.exception.code, 1)
+        self.assertEqual(err.exception.code, 1)
 
     def test_client_invalid_count(self):
         """Pass an invalid message count"""
         print(FCN_FMT % function_name())
 
         argv = str_to_argv('%s --port=12345 --count=XYZ' % LOG_CLIENT_NAME)
-        with self.assertRaises(SystemExit) as cm:
+        with self.assertRaises(SystemExit) as err:
             log_client.process_cmd_line(argv[1:])
-        self.assertEqual(cm.exception.code, 1)
+        self.assertEqual(err.exception.code, 1)
 
     def test_client_valid_int_sleep(self):
         """Pass valid sleep duration"""
@@ -186,9 +186,9 @@ class LogClientCmdLineTest(unittest.TestCase):
         print(FCN_FMT % function_name())
 
         argv = str_to_argv('%s --port=12345 --sleep=XYZ' % LOG_CLIENT_NAME)
-        with self.assertRaises(SystemExit) as cm:
+        with self.assertRaises(SystemExit) as err:
             log_client.process_cmd_line(argv[1:])
-        self.assertEqual(cm.exception.code, 1)
+        self.assertEqual(err.exception.code, 1)
 
     def test_client_end_msg_to_server(self):
         """Sending EXIT_SERVER to the server changes the count to 1.
